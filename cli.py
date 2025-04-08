@@ -108,9 +108,12 @@ def create_unsorted(pattern, count, sort, name):
     click.echo(f"Found {len(unsorted_tracks)} unsorted liked tracks")
 
     # Sort the tracks
-    if sort == "popularity":
+    if sort == "popular":
         sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or 0, reverse=True)
         sorted_tracks = sorted(sorted_tracks[:count], key=lambda t: t.popularity or 0, reverse=True)
+    if sort == "unpopular":
+        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or 0, reverse=True)
+        sorted_tracks = sorted(sorted_tracks[:count], key=lambda t: t.popularity or 0, reverse=False)
     elif sort == "date":
         sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or datetime.min, reverse=True)
     elif sort == "release":
