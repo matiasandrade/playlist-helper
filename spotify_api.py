@@ -1,11 +1,11 @@
 import os
-from datetime import datetime
-from typing import List, Dict, Optional, Any, Tuple, Iterator
+from typing import List, Dict, Optional, Any, Iterator
 import time
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from dotenv import load_dotenv
+
 
 def get_spotify_client() -> spotipy.Spotify:
     """
@@ -15,16 +15,22 @@ def get_spotify_client() -> spotipy.Spotify:
         spotipy.Spotify: Authenticated Spotify client
     """
     load_dotenv()
-    return spotipy.Spotify(auth_manager=SpotifyOAuth(
-        client_id=os.getenv('CLIENT_ID'),
-        client_secret=os.getenv('CLIENT_SECRET'),
-        redirect_uri='http://localhost:8888/callback',
-        scope='user-library-read playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public'
-    ))
+    return spotipy.Spotify(
+        auth_manager=SpotifyOAuth(
+            client_id=os.getenv("CLIENT_ID"),
+            client_secret=os.getenv("CLIENT_SECRET"),
+            redirect_uri="http://localhost:8888/callback",
+            scope="user-library-read playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public",
+        )
+    )
 
-def get_all_items(spotify: spotipy.Spotify, method_name: str,
-                 method_args: Dict[str, Any] = None, # type: ignore
-                 limit: int = 50) -> Iterator[Dict[str, Any]]:
+
+def get_all_items(
+    spotify: spotipy.Spotify,
+    method_name: str,
+    method_args: Dict[str, Any] = None,  # type: ignore
+    limit: int = 50,
+) -> Iterator[Dict[str, Any]]:
     """
     Generic pagination method for Spotify API.
 
@@ -41,7 +47,7 @@ def get_all_items(spotify: spotipy.Spotify, method_name: str,
         method_args = {}
 
     # Make sure limit is in method_args
-    method_args['limit'] = limit
+    method_args["limit"] = limit
 
     # Call the specified method on the spotify object
     method = getattr(spotify, method_name)
@@ -50,16 +56,16 @@ def get_all_items(spotify: spotipy.Spotify, method_name: str,
     results = method(**method_args)
 
     # Check for items or track attribute in results
-    if 'items' in results:
-        items_key = 'items'
-    elif 'tracks' in results and 'items' in results['tracks']:
-        items_key = 'tracks.items'
+    if "items" in results:
+        items_key = "items"
+    elif "tracks" in results and "items" in results["tracks"]:
+        items_key = "tracks.items"
     else:
         raise ValueError(f"Unexpected response format from {method_name}")
 
     # Get the items from the results
     items = results
-    for key in items_key.split('.'):
+    for key in items_key.split("."):
         items = items[key]
 
     # Yield items from the first request
@@ -67,7 +73,7 @@ def get_all_items(spotify: spotipy.Spotify, method_name: str,
         yield item
 
     # Continue pagination if needed
-    while results['next']: # type: ignore
+    while results["next"]:  # type: ignore
         # Rate limiting
         time.sleep(0.2)
 
@@ -76,12 +82,13 @@ def get_all_items(spotify: spotipy.Spotify, method_name: str,
 
         # Get the items from the results
         items = results
-        for key in items_key.split('.'):
-            items = items[key] # type: ignore
+        for key in items_key.split("."):
+            items = items[key]  # type: ignore
 
         # Yield items from subsequent requests
-        for item in items: # type: ignore
+        for item in items:  # type: ignore
             yield item
+
 
 def get_all_playlists(spotify: spotipy.Spotify) -> List[Dict]:
     """
@@ -93,7 +100,8 @@ def get_all_playlists(spotify: spotipy.Spotify) -> List[Dict]:
     Returns:
         List of playlist objects
     """
-    return list(get_all_items(spotify, 'current_user_playlists'))
+    return list(get_all_items(spotify, "current_user_playlists"))
+
 
 def get_playlist_tracks(spotify: spotipy.Spotify, playlist_id: str) -> List[Dict]:
     """
@@ -106,7 +114,8 @@ def get_playlist_tracks(spotify: spotipy.Spotify, playlist_id: str) -> List[Dict
     Returns:
         List of track objects with added_at information
     """
-    return list(get_all_items(spotify, 'playlist_tracks', {'playlist_id': playlist_id}))
+    return list(get_all_items(spotify, "playlist_tracks", {"playlist_id": playlist_id}))
+
 
 def get_liked_tracks(spotify: spotipy.Spotify) -> List[Dict]:
     """
@@ -118,7 +127,7 @@ def get_liked_tracks(spotify: spotipy.Spotify) -> List[Dict]:
     Returns:
         List of saved track objects
     """
-    return list(get_all_items(spotify, 'current_user_saved_tracks'))
+    return list(get_all_items(spotify, "current_user_saved_tracks"))
 
 
 def get_artists(spotify: spotipy.Spotify, artist_ids: List[str]) -> List[Dict]:
@@ -135,17 +144,21 @@ def get_artists(spotify: spotipy.Spotify, artist_ids: List[str]) -> List[Dict]:
     # Process in chunks of 50 (Spotify API limit)
     results = []
     for i in range(0, len(artist_ids), 50):
-        chunk = artist_ids[i:i+50]
+        chunk = artist_ids[i : i + 50]
         # Rate limiting
         time.sleep(0.2)
-        artists = spotify.artists(chunk)['artists'] # type: ignore
+        artists = spotify.artists(chunk)["artists"]  # type: ignore
         results.extend(artists)
 
     return results
 
-def create_playlist(spotify: spotipy.Spotify, name: str,
-                   description: Optional[str] = None,
-                   public: bool = False) -> Dict:
+
+def create_playlist(
+    spotify: spotipy.Spotify,
+    name: str,
+    description: Optional[str] = None,
+    public: bool = False,
+) -> Dict:
     """
     Create a new playlist.
 
@@ -158,15 +171,18 @@ def create_playlist(spotify: spotipy.Spotify, name: str,
     Returns:
         Created playlist object
     """
-    user_id = spotify.me()['id'] # type: ignore
-    return spotify.user_playlist_create( # type: ignore
+    user_id = spotify.me()["id"]  # type: ignore
+    return spotify.user_playlist_create(  # type: ignore
         user=user_id,
         name=name,
         public=public,
-        description=description # type: ignore
+        description=description,  # type: ignore
     )
 
-def add_tracks_to_playlist(spotify: spotipy.Spotify, playlist_id: str, track_ids: List[str]) -> None:
+
+def add_tracks_to_playlist(
+    spotify: spotipy.Spotify, playlist_id: str, track_ids: List[str]
+) -> None:
     """
     Add tracks to a playlist.
 
@@ -177,7 +193,7 @@ def add_tracks_to_playlist(spotify: spotipy.Spotify, playlist_id: str, track_ids
     """
     # Process in chunks of 100 (Spotify API limit)
     for i in range(0, len(track_ids), 100):
-        chunk = track_ids[i:i+100]
+        chunk = track_ids[i : i + 100]
         # Rate limiting
         time.sleep(0.2)
         spotify.playlist_add_items(playlist_id, chunk)

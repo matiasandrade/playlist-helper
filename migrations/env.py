@@ -7,7 +7,6 @@ from alembic import context
 
 from db_models import Base
 from db_utils import get_db_path
-import os
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -27,10 +26,12 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+
 def get_url():
     """Get the database URL dynamically."""
     db_path = get_db_path()
     return f"sqlite:///{db_path}"
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -65,18 +66,16 @@ def run_migrations_online() -> None:
     """
     # Override with dynamic URL
     config_section = config.get_section(config.config_ini_section)
-    config_section["sqlalchemy.url"] = get_url() # type: ignore
+    config_section["sqlalchemy.url"] = get_url()  # type: ignore
 
     connectable = engine_from_config(
-        config_section, # type: ignore
+        config_section,  # type: ignore
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
