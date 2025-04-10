@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 def get_spotify_client() -> spotipy.Spotify:
     """
     Get an authenticated Spotify client.
-    
+
     Returns:
         spotipy.Spotify: Authenticated Spotify client
     """
@@ -22,33 +22,33 @@ def get_spotify_client() -> spotipy.Spotify:
         scope='user-library-read playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public'
     ))
 
-def get_all_items(spotify: spotipy.Spotify, method_name: str, 
-                 method_args: Dict[str, Any] = None, 
+def get_all_items(spotify: spotipy.Spotify, method_name: str,
+                 method_args: Dict[str, Any] = None, # type: ignore
                  limit: int = 50) -> Iterator[Dict[str, Any]]:
     """
     Generic pagination method for Spotify API.
-    
+
     Args:
         spotify: Authenticated Spotify client
         method_name: Name of the Spotify method to call
         method_args: Arguments to pass to the method
         limit: Limit per page
-        
+
     Yields:
         Individual items from the paginated results
     """
     if method_args is None:
         method_args = {}
-    
+
     # Make sure limit is in method_args
     method_args['limit'] = limit
-    
+
     # Call the specified method on the spotify object
     method = getattr(spotify, method_name)
-    
+
     # Initial request
     results = method(**method_args)
-    
+
     # Check for items or track attribute in results
     if 'items' in results:
         items_key = 'items'
@@ -56,40 +56,40 @@ def get_all_items(spotify: spotipy.Spotify, method_name: str,
         items_key = 'tracks.items'
     else:
         raise ValueError(f"Unexpected response format from {method_name}")
-    
+
     # Get the items from the results
     items = results
     for key in items_key.split('.'):
         items = items[key]
-    
+
     # Yield items from the first request
     for item in items:
         yield item
-    
+
     # Continue pagination if needed
-    while results['next']:
+    while results['next']: # type: ignore
         # Rate limiting
         time.sleep(0.2)
-        
+
         # Get next page
         results = spotify.next(results)
-        
+
         # Get the items from the results
         items = results
         for key in items_key.split('.'):
-            items = items[key]
-        
+            items = items[key] # type: ignore
+
         # Yield items from subsequent requests
-        for item in items:
+        for item in items: # type: ignore
             yield item
 
 def get_all_playlists(spotify: spotipy.Spotify) -> List[Dict]:
     """
     Get all playlists for the current user.
-    
+
     Args:
         spotify: Authenticated Spotify client
-        
+
     Returns:
         List of playlist objects
     """
@@ -98,11 +98,11 @@ def get_all_playlists(spotify: spotipy.Spotify) -> List[Dict]:
 def get_playlist_tracks(spotify: spotipy.Spotify, playlist_id: str) -> List[Dict]:
     """
     Get all tracks in a playlist.
-    
+
     Args:
         spotify: Authenticated Spotify client
         playlist_id: Spotify playlist ID
-        
+
     Returns:
         List of track objects with added_at information
     """
@@ -111,10 +111,10 @@ def get_playlist_tracks(spotify: spotipy.Spotify, playlist_id: str) -> List[Dict
 def get_liked_tracks(spotify: spotipy.Spotify) -> List[Dict]:
     """
     Get all liked tracks.
-    
+
     Args:
         spotify: Authenticated Spotify client
-        
+
     Returns:
         List of saved track objects
     """
@@ -124,11 +124,11 @@ def get_liked_tracks(spotify: spotipy.Spotify) -> List[Dict]:
 def get_artists(spotify: spotipy.Spotify, artist_ids: List[str]) -> List[Dict]:
     """
     Get full artist information.
-    
+
     Args:
         spotify: Authenticated Spotify client
         artist_ids: List of artist IDs
-        
+
     Returns:
         List of artist objects
     """
@@ -138,38 +138,38 @@ def get_artists(spotify: spotipy.Spotify, artist_ids: List[str]) -> List[Dict]:
         chunk = artist_ids[i:i+50]
         # Rate limiting
         time.sleep(0.2)
-        artists = spotify.artists(chunk)['artists']
+        artists = spotify.artists(chunk)['artists'] # type: ignore
         results.extend(artists)
-    
+
     return results
 
-def create_playlist(spotify: spotipy.Spotify, name: str, 
-                   description: Optional[str] = None, 
+def create_playlist(spotify: spotipy.Spotify, name: str,
+                   description: Optional[str] = None,
                    public: bool = False) -> Dict:
     """
     Create a new playlist.
-    
+
     Args:
         spotify: Authenticated Spotify client
         name: Playlist name
         description: Playlist description
         public: Whether the playlist should be public
-        
+
     Returns:
         Created playlist object
     """
-    user_id = spotify.me()['id']
-    return spotify.user_playlist_create(
+    user_id = spotify.me()['id'] # type: ignore
+    return spotify.user_playlist_create( # type: ignore
         user=user_id,
         name=name,
         public=public,
-        description=description
+        description=description # type: ignore
     )
 
 def add_tracks_to_playlist(spotify: spotipy.Spotify, playlist_id: str, track_ids: List[str]) -> None:
     """
     Add tracks to a playlist.
-    
+
     Args:
         spotify: Authenticated Spotify client
         playlist_id: Playlist ID

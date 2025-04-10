@@ -44,16 +44,16 @@ def log_sync_start(session: Session, sync_type: str) -> SyncLog:
     session.commit()
     return sync_log
 
-def log_sync_complete(session: Session, sync_log: SyncLog, 
+def log_sync_complete(session: Session, sync_log: SyncLog,
                      items_synced: int, success: bool = True,
                      error_message: Optional[str] = None,
                      cursor: Optional[str] = None):
     """Update a sync log entry when the sync is complete."""
-    sync_log.completed_at = datetime.utcnow()
-    sync_log.items_synced = items_synced
-    sync_log.success = 1 if success else 0
-    sync_log.error_message = error_message
-    sync_log.cursor = cursor
+    sync_log.completed_at = datetime.utcnow() # type: ignore
+    sync_log.items_synced = items_synced # type: ignore
+    sync_log.success = 1 if success else 0 # type: ignore
+    sync_log.error_message = error_message # type: ignore
+    sync_log.cursor = cursor # type: ignore
     session.commit()
 
 def save_artist(session: Session, artist_data: Dict[str, Any]) -> Artist:
@@ -61,16 +61,16 @@ def save_artist(session: Session, artist_data: Dict[str, Any]) -> Artist:
     artist = session.query(Artist).get(artist_data["id"])
     if not artist:
         artist = Artist(id=artist_data["id"])
-    
+
     artist.name = artist_data["name"]
     if "popularity" in artist_data:
         artist.popularity = artist_data["popularity"]
     if "genres" in artist_data and artist_data["genres"]:
-        artist.genres = ",".join(artist_data["genres"])
+        artist.genres = ",".join(artist_data["genres"]) # type: ignore
     if "images" in artist_data and artist_data["images"]:
         artist.image_url = artist_data["images"][0]["url"]
-    
-    artist.last_updated = datetime.utcnow()
+
+    artist.last_updated = datetime.utcnow() # type: ignore
     session.add(artist)
     return artist
 
@@ -79,7 +79,7 @@ def save_album(session: Session, album_data: Dict[str, Any]) -> Album:
     album = session.query(Album).get(album_data["id"])
     if not album:
         album = Album(id=album_data["id"])
-    
+
     album.name = album_data["name"]
     if "album_type" in album_data:
         album.album_type = album_data["album_type"]
@@ -89,13 +89,13 @@ def save_album(session: Session, album_data: Dict[str, Any]) -> Album:
         album.total_tracks = album_data["total_tracks"]
     if "images" in album_data and album_data["images"]:
         album.image_url = album_data["images"][0]["url"]
-    
-    album.last_updated = datetime.utcnow()
+
+    album.last_updated = datetime.utcnow() # type: ignore
     session.add(album)
     return album
 
-def save_track(session: Session, track_data: Dict[str, Any], 
-               album: Optional[Album] = None, 
+def save_track(session: Session, track_data: Dict[str, Any],
+               album: Optional[Album] = None,
                artists: Optional[List[Artist]] = None,
                is_liked: bool = False,
                liked_at: Optional[datetime] = None) -> Track:
@@ -103,28 +103,28 @@ def save_track(session: Session, track_data: Dict[str, Any],
     track = session.query(Track).get(track_data["id"])
     if not track:
         track = Track(id=track_data["id"])
-    
+
     track.name = track_data["name"]
-    track.duration_ms = track_data.get("duration_ms")
-    track.explicit = 1 if track_data.get("explicit") else 0
-    track.popularity = track_data.get("popularity")
-    track.preview_url = track_data.get("preview_url")
-    track.track_number = track_data.get("track_number")
-    
+    track.duration_ms = track_data.get("duration_ms") # type: ignore
+    track.explicit = 1 if track_data.get("explicit") else 0 # type: ignore
+    track.popularity = track_data.get("popularity") # type: ignore
+    track.preview_url = track_data.get("preview_url") # type: ignore
+    track.track_number = track_data.get("track_number") # type: ignore
+
     if is_liked:
-        track.is_liked = 1
-        track.liked_at = liked_at
-    
+        track.is_liked = 1 # type: ignore
+        track.liked_at = liked_at # type: ignore
+
     if album:
         track.album = album
         # Copy release date from album for easier filtering/sorting
-        if album.release_date:
+        if album.release_date: # type: ignore
             track.release_date = album.release_date
-    
+
     if artists:
         track.artists = artists
-    
-    track.last_updated = datetime.utcnow()
+
+    track.last_updated = datetime.utcnow() # type: ignore
     session.add(track)
     return track
 
@@ -134,30 +134,30 @@ def save_playlist(session: Session, playlist_data: Dict[str, Any]) -> Playlist:
     playlist = session.query(Playlist).get(playlist_data["id"])
     if not playlist:
         playlist = Playlist(id=playlist_data["id"])
-    
+
     playlist.name = playlist_data["name"]
-    playlist.description = playlist_data.get("description")
-    playlist.public = 1 if playlist_data.get("public") else 0
-    playlist.collaborative = 1 if playlist_data.get("collaborative") else 0
+    playlist.description = playlist_data.get("description") # type: ignore
+    playlist.public = 1 if playlist_data.get("public") else 0 # type: ignore
+    playlist.collaborative = 1 if playlist_data.get("collaborative") else 0 # type: ignore
     playlist.owner_id = playlist_data.get("owner", {}).get("id")
     playlist.total_tracks = playlist_data.get("tracks", {}).get("total")
-    
+
     if "images" in playlist_data and playlist_data["images"]:
         playlist.image_url = playlist_data["images"][0]["url"]
-    
-    playlist.last_updated = datetime.utcnow()
+
+    playlist.last_updated = datetime.utcnow() # type: ignore
     session.add(playlist)
     return playlist
 
-def add_track_to_playlist(session: Session, playlist: Playlist, track: Track, 
+def add_track_to_playlist(session: Session, playlist: Playlist, track: Track,
                          position: int, added_at: Optional[datetime] = None):
     """Add a track to a playlist with position and added_at information."""
     # SQLAlchemy doesn't directly support adding data to the association table
     # with additional columns, so we use raw SQL
     session.execute(
         text("""
-            INSERT OR REPLACE INTO playlist_track 
-            (playlist_id, track_id, position, added_at) 
+            INSERT OR REPLACE INTO playlist_track
+            (playlist_id, track_id, position, added_at)
             VALUES (:playlist_id, :track_id, :position, :added_at)
         """),
         {
@@ -169,7 +169,7 @@ def add_track_to_playlist(session: Session, playlist: Playlist, track: Track,
     )
 
 # Analytics queries
-def get_top_artists(session: Session, limit: int = 10, 
+def get_top_artists(session: Session, limit: int = 10,
                    playlist_pattern: Optional[str] = None,
                    liked_only: bool = False) -> List[Tuple[Artist, int]]:
     """Get top artists by track count."""
@@ -178,16 +178,16 @@ def get_top_artists(session: Session, limit: int = 10,
         .join(trackartist_association, Artist.id == trackartist_association.c.artist_id)
         .join(Track, Track.id == trackartist_association.c.track_id)
     )
-    
+
     if playlist_pattern:
         query = query.join(playlisttrack_association, Track.id == playlisttrack_association.c.track_id)
         query = query.join(Playlist, Playlist.id == playlisttrack_association.c.playlist_id)
         query = query.filter(Playlist.name.like(f"%{playlist_pattern}%"))
-    
+
     if liked_only:
         query = query.filter(Track.is_liked == 1)
-    
-    return query.group_by(Artist.id).order_by(text("track_count DESC")).limit(limit).all()
+
+    return query.group_by(Artist.id).order_by(text("track_count DESC")).limit(limit).all() # type:ignore
 
 def get_unsorted_liked_tracks(session: Session, playlist_pattern: str) -> List[Track]:
     """Get tracks that are liked but not in any playlist matching the pattern."""
@@ -195,12 +195,12 @@ def get_unsorted_liked_tracks(session: Session, playlist_pattern: str) -> List[T
         session.query(Track)
         .filter(Track.is_liked == 1)
         .outerjoin(
-            playlisttrack_association, 
+            playlisttrack_association,
             Track.id == playlisttrack_association.c.track_id
         )
         .outerjoin(
-            Playlist, 
-            (Playlist.id == playlisttrack_association.c.playlist_id) & 
+            Playlist,
+            (Playlist.id == playlisttrack_association.c.playlist_id) &
             (Playlist.name.like(f"%{playlist_pattern}%"))
         )
         .filter(Playlist.id == None)

@@ -80,9 +80,9 @@ def top_artists(pattern, limit, liked_only):
 
     # Add rows
     for i, (artist, count) in enumerate(results, 1):
-        genres = artist.genres.split(",")[:3] if artist.genres else []
+        genres = artist.genres.split(",")[:3] if artist.genres else [] # type: ignore
         genres_display = ", ".join(genres) if genres else "N/A"
-        table.add_row(str(i), artist.name, str(count), genres_display)
+        table.add_row(str(i), artist.name, str(count), genres_display) # type: ignore
 
     # Print the table
     console.print(table)
@@ -109,15 +109,15 @@ def create_unsorted(pattern, count, sort, name):
 
     # Sort the tracks
     if sort == "popular":
-        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or 0, reverse=True)
+        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or 0, reverse=True) # type: ignore
         sorted_tracks = sorted(sorted_tracks[:count], key=lambda t: t.popularity or 0, reverse=True)
     if sort == "unpopular":
-        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or 0, reverse=True)
+        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or 0, reverse=True) # type: ignore
         sorted_tracks = sorted(sorted_tracks[:count], key=lambda t: t.popularity or 0, reverse=False)
     elif sort == "date":
-        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or datetime.min, reverse=True)
+        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.liked_at or datetime.min, reverse=True) # type: ignore
     elif sort == "release":
-        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.release_date or "", reverse=True)
+        sorted_tracks = sorted(unsorted_tracks, key=lambda t: t.release_date or "", reverse=True) # type: ignore
     else:  # random
         import random
         sorted_tracks = list(unsorted_tracks)
@@ -130,7 +130,7 @@ def create_unsorted(pattern, count, sort, name):
     if not name:
         volume = 1
         # Find the highest volume number in existing playlists matching the pattern
-        all_playlists = spotify.current_user_playlists()["items"]
+        all_playlists = spotify.current_user_playlists()["items"] # type: ignore
         for playlist in all_playlists:
             # Look for playlists with the format "pattern - vol. X" or "pattern - vol X"
             match = re.search(rf"{pattern}.*vol\.?\s*(\d+)", playlist["name"], re.IGNORECASE)
@@ -151,7 +151,7 @@ def create_unsorted(pattern, count, sort, name):
 
     # Add tracks to the playlist
     track_ids = [track.id for track in tracks_to_add]
-    add_tracks_to_playlist(spotify, playlist["id"], track_ids)
+    add_tracks_to_playlist(spotify, playlist["id"], track_ids) # type: ignore
 
     click.echo(f"Successfully created playlist '{name}' with {len(tracks_to_add)} tracks")
 
@@ -164,11 +164,11 @@ def api_info():
     me = spotify.me()
     sample_playlists = spotify.current_user_playlists(limit=1)
 
-    if sample_playlists["items"]:
-        sample_playlist_id = sample_playlists["items"][0]["id"]
+    if sample_playlists["items"]: # type: ignore
+        sample_playlist_id = sample_playlists["items"][1]["id"] # type: ignore
         sample_tracks = spotify.playlist_tracks(sample_playlist_id, limit=1)
-        if sample_tracks["items"]:
-            sample_track = sample_tracks["items"][0]["track"]
+        if sample_tracks["items"]: # type: ignore
+            sample_track = sample_tracks["items"][0]["track"] # type: ignore
         else:
             sample_track = None
     else:
@@ -176,12 +176,12 @@ def api_info():
 
     # Display user information
     click.echo("\n=== User Information ===")
-    click.echo(f"ID: {me['id']}")
-    click.echo(f"Name: {me['display_name']}")
-    click.echo(f"Email: {me.get('email', 'N/A')}")
-    click.echo(f"Country: {me.get('country', 'N/A')}")
-    click.echo(f"Product: {me.get('product', 'N/A')}")
-    click.echo(f"Followers: {me.get('followers', {}).get('total', 'N/A')}")
+    click.echo(f"ID: {me['id']}") # type: ignore
+    click.echo(f"Name: {me['display_name']}") # type: ignore
+    click.echo(f"Email: {me.get('email', 'N/A')}") # type: ignore
+    click.echo(f"Country: {me.get('country', 'N/A')}") # type: ignore
+    click.echo(f"Product: {me.get('product', 'N/A')}") # type: ignore
+    click.echo(f"Followers: {me.get('followers', {}).get('total', 'N/A')}") # type: ignore
 
     # Display track information if available
     if sample_track:
@@ -200,7 +200,7 @@ def show_playlist(name):
     spotify = get_spotify_client()
 
     # Get all playlists
-    playlists = spotify.current_user_playlists()["items"]
+    playlists = spotify.current_user_playlists()["items"] # type: ignore
 
     # Find matching playlists
     matching_playlists = [p for p in playlists if name.lower() in p["name"].lower()]
@@ -218,7 +218,7 @@ def show_playlist(name):
         click.echo(f"Tracks: {playlist['tracks']['total']}")
 
         # Get first 5 tracks as a preview
-        tracks = spotify.playlist_tracks(playlist["id"], limit=5)["items"]
+        tracks = spotify.playlist_tracks(playlist["id"], limit=5)["items"] # type: ignore
         if tracks:
             click.echo("\nPreview of tracks:")
             for i, item in enumerate(tracks, 1):

@@ -65,10 +65,10 @@ def run_migrations_online() -> None:
     """
     # Override with dynamic URL
     config_section = config.get_section(config.config_ini_section)
-    config_section["sqlalchemy.url"] = get_url()
+    config_section["sqlalchemy.url"] = get_url() # type: ignore
 
     connectable = engine_from_config(
-        config_section,
+        config_section, # type: ignore
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
