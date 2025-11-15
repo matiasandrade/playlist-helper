@@ -12,114 +12,145 @@ from sync import sync_all, sync_liked_tracks, sync_playlists
 console = Console()
 
 
+def _get_single_sort_key(track, sort_method):
+    """Get sort key for a single sort method.
+
+    Args:
+        track: Track object to get key for
+        sort_method: Sort method name (without count)
+
+    Returns:
+        Sortable key value
+    """
+    if sort_method == "popularity":
+        # Higher popularity first -> negate for ascending sort
+        return -(track.popularity if track.popularity is not None else -1)
+    elif sort_method == "rarity":
+        # Lower popularity first (rarest)
+        return track.popularity if track.popularity is not None else 999
+    elif sort_method == "date":
+        # Most recent liked_at first -> negate timestamp
+        if track.liked_at:
+            return -track.liked_at.timestamp()
+        else:
+            return 0
+    elif sort_method == "release":
+        # Newest release first -> invert the string for comparison
+        release = track.release_date if track.release_date else ""
+        if release:
+            # Invert the string for descending order
+            inverted = "".join(
+                chr(ord("z") - ord(c) + ord("0")) if c.isdigit() else c for c in release
+            )
+            return inverted
+        else:
+            return "z" * 10  # Sort empty dates last
+    elif sort_method == "oldest":
+        # Oldest release first -> use string directly (ascending order)
+        release = track.release_date if track.release_date else ""
+        if release:
+            return release
+        else:
+            return "z" * 10  # Empty dates go last
+    else:
+        return 0
+
+
 def apply_multi_sort(tracks, sort_string):
-    """Apply multiple sort criteria to tracks using tuple keys for proper multi-sort.
+    """Apply multiple sort criteria with progressive filtering support.
 
     Args:
         tracks: List of track objects to sort
-        sort_string: Comma-separated sort methods (e.g., "rarity,date")
+        sort_string: Comma-separated sort methods with optional counts
+                    Format: "method1:count1,method2:count2,method3"
                     Available methods:
                     - popularity: high to low (most popular first)
                     - rarity: low to high (least popular = rarest first)
                     - date: most recent liked_at first
                     - release: newest release_date first
                     - oldest: oldest release_date first (vintage tracks)
+                    - random: random shuffle
 
     Returns:
-        Sorted list of tracks
+        Sorted (and optionally filtered) list of tracks
 
-    Example:
-        "rarity,date" -> Sort by rarity (least popular first),
-                         then by date added (most recent first) for ties
-        This means: among the rarest tracks, show the most recently added ones first
+    Examples:
+        Basic multi-sort (hierarchical):
+        "rarity,date" -> Sort by rarity, then by date for ties
 
-        "oldest,date" -> Sort by oldest releases first,
-                         then by most recently liked for ties
-        This finds vintage tracks you've recently discovered
+        Progressive filtering (NEW):
+        "date:3000,oldest:500,popularity:150" ->
+            1. Get 3000 most recently liked tracks
+            2. From those, get 500 oldest releases
+            3. From those, get 150 sorted by popularity
+            Result: 150 tracks that are old, recently discovered, and popular
 
-    LIMITATION - Two-Stage Sorting Not Supported:
-        The current implementation uses hierarchical/tuple-based sorting.
-        It does NOT support "filter by X, then sort by Y" workflows.
+        "oldest,date" -> Oldest releases, recently liked as tiebreaker
 
-        For example, you CANNOT currently do:
-        - "Get the 150 most recently added tracks, then sort by popularity"
-        - This would require: --sort date:150,popularity (NOT IMPLEMENTED)
+        "date:500,popularity" -> Get 500 recent tracks, sort by popularity
 
-        Current workarounds:
-        - Use --sort date --count 150 (gets recent tracks, sorted by date)
-        - Use --sort popularity,date (gets popular tracks, date as tiebreaker)
-
-        Future enhancement: Implement two-stage sorting with syntax like:
-        - --sort date:150,popularity (filter top 150 by date, then re-sort by popularity)
-        - Or add --pre-sort option: --pre-sort date --count 150 --sort popularity
+    Progressive Filtering Logic:
+        - If a sort has a count (e.g., "date:3000"), it filters to top N after sorting
+        - Subsequent sorts operate on the filtered results
+        - Process left-to-right
+        - Final result respects the last sort's ordering
     """
     if not sort_string:
         return tracks
 
-    # Parse sort methods
-    sort_methods = [s.strip() for s in sort_string.split(",")]
+    # Parse sort methods with optional counts
+    # Format: "method:count" or "method"
+    sort_specs = []
+    for spec in sort_string.split(","):
+        spec = spec.strip()
+        if ":" in spec:
+            method, count_str = spec.split(":", 1)
+            sort_specs.append((method.strip(), int(count_str.strip())))
+        else:
+            sort_specs.append((spec, None))
+
+    # Check if any specs have counts (progressive filtering mode)
+    has_counts = any(count is not None for _, count in sort_specs)
 
     # Special case for random
-    if "random" in sort_methods:
+    if any(method == "random" for method, _ in sort_specs):
         import random
 
         sorted_tracks = list(tracks)
         random.shuffle(sorted_tracks)
+        # If random has a count, apply it
+        for method, count in sort_specs:
+            if method == "random" and count:
+                return sorted_tracks[:count]
         return sorted_tracks
 
-    # Build a tuple key function for multi-sort
-    # Python's sort is stable and sorts tuples element-by-element
-    def make_sort_key(track):
-        key_parts = []
-        for sort_method in sort_methods:
-            if sort_method == "popularity":
-                # Higher popularity first -> negate for ascending sort
-                # None values get -1, which becomes 1 after negation (sorted last)
-                key_parts.append(
-                    -(track.popularity if track.popularity is not None else -1)
-                )
-            elif sort_method == "rarity":
-                # Lower popularity first (rarest)
-                # None values get 999 (sorted last)
-                key_parts.append(
-                    track.popularity if track.popularity is not None else 999
-                )
-            elif sort_method == "date":
-                # Most recent liked_at first -> negate timestamp
-                # None values get 0 (sorted last)
-                if track.liked_at:
-                    key_parts.append(-track.liked_at.timestamp())
-                else:
-                    key_parts.append(0)
-            elif sort_method == "release":
-                # Newest release first -> invert the string for comparison
-                # Release dates are in YYYY-MM-DD format
-                # We invert by subtracting each char from 'z' to reverse string ordering
-                release = track.release_date if track.release_date else ""
-                if release:
-                    # Invert the string for descending order
-                    # YYYY-MM-DD strings naturally sort ascending, so we invert
-                    inverted = "".join(
-                        chr(ord("z") - ord(c) + ord("0")) if c.isdigit() else c
-                        for c in release
-                    )
-                    key_parts.append(inverted)
-                else:
-                    key_parts.append("z" * 10)  # Sort empty dates last
-            elif sort_method == "oldest":
-                # Oldest release first -> use string directly (ascending order)
-                # Release dates in YYYY-MM-DD format naturally sort oldest first
-                release = track.release_date if track.release_date else ""
-                if release:
-                    key_parts.append(release)
-                else:
-                    # Empty dates go last
-                    key_parts.append("z" * 10)
+    if has_counts:
+        # Progressive filtering mode: apply sorts left-to-right
+        current_tracks = list(tracks)
 
-        return tuple(key_parts)
+        for method, count in sort_specs:
+            # Sort by this method
+            current_tracks = sorted(
+                current_tracks, key=lambda t: _get_single_sort_key(t, method)
+            )
+            # If count is specified, limit to top N
+            if count is not None:
+                current_tracks = current_tracks[:count]
 
-    sorted_tracks = sorted(tracks, key=make_sort_key)
-    return sorted_tracks
+        return current_tracks
+    else:
+        # Original hierarchical multi-sort using tuple keys
+        # All methods without counts - use tuple-based sorting for ties
+        methods_only = [method for method, _ in sort_specs]
+
+        def make_sort_key(track):
+            key_parts = []
+            for method in methods_only:
+                key_parts.append(_get_single_sort_key(track, method))
+            return tuple(key_parts)
+
+        sorted_tracks = sorted(tracks, key=make_sort_key)
+        return sorted_tracks
 
 
 @click.group()
@@ -206,7 +237,9 @@ def top_artists(pattern, limit, liked_only):
     "--sort",
     "-s",
     default="popularity",
-    help="Sort method(s) - comma-separated for multiple: popularity, rarity, date, release, oldest, random",
+    help="Sort method(s) with optional counts for progressive filtering. "
+    "Examples: 'date:3000,oldest:500,popularity:150' or 'rarity,date'. "
+    "Methods: popularity, rarity, date, release, oldest, random",
 )
 @click.option(
     "--name", "-n", help="Name of the new playlist (defaults to a generated name)"
@@ -228,8 +261,23 @@ def create_unsorted(pattern, count, sort, name):
     # Sort the tracks using the multi-sort function
     sorted_tracks = apply_multi_sort(unsorted_tracks, sort)
 
-    # Limit to requested count
-    tracks_to_add = sorted_tracks[:count]
+    # Determine final count
+    # If sort string ends with a count (e.g., "date:3000,popularity:150"),
+    # use that count. Otherwise use --count parameter.
+    final_count = count
+    if sort and ":" in sort:
+        # Check if the last sort spec has a count
+        last_spec = sort.split(",")[-1].strip()
+        if ":" in last_spec:
+            _, count_str = last_spec.split(":", 1)
+            try:
+                final_count = int(count_str.strip())
+                click.echo(f"Using count from sort string: {final_count}")
+            except ValueError:
+                pass  # Use default count if parsing fails
+
+    # Limit to requested count (if not already limited by sort)
+    tracks_to_add = sorted_tracks[:final_count]
 
     # Create playlist name if not provided
     if not name:
@@ -309,7 +357,9 @@ def api_info():
     "--sort",
     "-s",
     default="popularity",
-    help="Sort method(s) - comma-separated for multiple: popularity, rarity, date, release, oldest, random",
+    help="Sort method(s) with optional counts for progressive filtering. "
+    "Examples: 'date:3000,oldest:500,popularity:150' or 'rarity,date'. "
+    "Methods: popularity, rarity, date, release, oldest, random",
 )
 def show_playlist(name, sort):
     """Show details of a playlist by name (partial match)."""

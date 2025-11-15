@@ -2,46 +2,43 @@
 
 ## Sorting Enhancements
 
-### Two-Stage Sorting (Filter then Sort)
+### ✅ Progressive Filtering (Filter then Sort) - IMPLEMENTED
 
-**Status**: Planned
+**Status**: ✅ Implemented
 **Priority**: Medium
 
-**Problem**:
-Current multi-sort implementation uses hierarchical/tuple-based sorting. This means you cannot "filter by one criterion, then re-sort by another."
+**Implementation**:
+Implemented Option A - count syntax in sort string.
 
-**Example Use Case**:
-User wants to get the 150 most recently added tracks, then sort those 150 by popularity (highest to lowest).
+**Usage**:
+```bash
+# Get 3000 most recently liked, then 500 oldest from those, then 150 most popular
+uv run main.py create-unsorted "house" --sort date:3000,oldest:500,popularity:150
 
-**Current Limitations**:
-- `--sort date --count 150` → Gets 150 recent tracks, but sorted by date
-- `--sort popularity,date --count 150` → Gets 150 most popular tracks overall (not recent ones)
-- `--sort date,popularity --count 150` → Gets recent tracks, popularity only used as tiebreaker
+# Get 150 most recently added, then sort by popularity
+uv run main.py create-unsorted "house" --sort date:150,popularity
 
-**Proposed Solutions**:
+# Traditional hierarchical sort still works
+uv run main.py create-unsorted "house" --sort rarity,date
+```
 
-1. **Option A**: Syntax with count in sort string
-   ```bash
-   uv run main.py create-unsorted "house" --sort date:150,popularity
-   # Meaning: Get top 150 by date, then re-sort those by popularity
-   ```
+**How it works**:
+- Parse sort string for `method:count` syntax
+- Apply sorts **left-to-right** with progressive filtering
+- If count is specified, limit to top N after that sort
+- Subsequent sorts operate on filtered results
+- Traditional multi-sort (no counts) uses tuple-based hierarchical sorting
 
-2. **Option B**: Add separate pre-sort option
-   ```bash
-   uv run main.py create-unsorted "house" --pre-sort date --count 150 --sort popularity
-   # More explicit but verbose
-   ```
+**Examples**:
+- `date:3000,oldest:500,popularity:150` → 150 tracks that are old, recently discovered, and popular
+- `date:1000,popularity` → 1000 recent tracks sorted by popularity
+- `rarity,date` → All tracks sorted by rarity, then date as tiebreaker
 
-3. **Option C**: SQL-level implementation
-   ```python
-   # Modify get_unsorted_liked_tracks to accept pre_sort parameter
-   # Returns: SELECT * FROM (SELECT * FROM tracks ORDER BY liked_at DESC LIMIT 150) ORDER BY popularity DESC
-   ```
-
-**Implementation Notes**:
-- See `cli.py:apply_multi_sort()` docstring for detailed explanation
-- May need to modify both `create_unsorted` and `show_playlist` commands
-- Consider SQL-level optimization for large datasets
+**Implementation Details**:
+- See `cli.py:apply_multi_sort()` for implementation
+- `_get_single_sort_key()` extracts sort key for a single method
+- Progressive filtering mode activated when any count is present
+- Final count from sort string takes precedence over `--count` parameter
 
 ---
 
