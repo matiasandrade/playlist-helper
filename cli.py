@@ -12,6 +12,102 @@ from sync import sync_all, sync_liked_tracks, sync_playlists
 console = Console()
 
 
+def apply_multi_sort(tracks, sort_string):
+    """Apply multiple sort criteria to tracks using tuple keys for proper multi-sort.
+
+    Args:
+        tracks: List of track objects to sort
+        sort_string: Comma-separated sort methods (e.g., "rarity,date")
+                    Available methods:
+                    - popularity: high to low (most popular first)
+                    - rarity: low to high (least popular = rarest first)
+                    - date: most recent liked_at first
+                    - release: newest release_date first
+
+    Returns:
+        Sorted list of tracks
+
+    Example:
+        "rarity,date" -> Sort by rarity (least popular first),
+                         then by date added (most recent first) for ties
+        This means: among the rarest tracks, show the most recently added ones first
+
+    LIMITATION - Two-Stage Sorting Not Supported:
+        The current implementation uses hierarchical/tuple-based sorting.
+        It does NOT support "filter by X, then sort by Y" workflows.
+
+        For example, you CANNOT currently do:
+        - "Get the 150 most recently added tracks, then sort by popularity"
+        - This would require: --sort date:150,popularity (NOT IMPLEMENTED)
+
+        Current workarounds:
+        - Use --sort date --count 150 (gets recent tracks, sorted by date)
+        - Use --sort popularity,date (gets popular tracks, date as tiebreaker)
+
+        Future enhancement: Implement two-stage sorting with syntax like:
+        - --sort date:150,popularity (filter top 150 by date, then re-sort by popularity)
+        - Or add --pre-sort option: --pre-sort date --count 150 --sort popularity
+    """
+    if not sort_string:
+        return tracks
+
+    # Parse sort methods
+    sort_methods = [s.strip() for s in sort_string.split(",")]
+
+    # Special case for random
+    if "random" in sort_methods:
+        import random
+
+        sorted_tracks = list(tracks)
+        random.shuffle(sorted_tracks)
+        return sorted_tracks
+
+    # Build a tuple key function for multi-sort
+    # Python's sort is stable and sorts tuples element-by-element
+    def make_sort_key(track):
+        key_parts = []
+        for sort_method in sort_methods:
+            if sort_method == "popularity":
+                # Higher popularity first -> negate for ascending sort
+                # None values get -1, which becomes 1 after negation (sorted last)
+                key_parts.append(
+                    -(track.popularity if track.popularity is not None else -1)
+                )
+            elif sort_method == "rarity":
+                # Lower popularity first (rarest)
+                # None values get 999 (sorted last)
+                key_parts.append(
+                    track.popularity if track.popularity is not None else 999
+                )
+            elif sort_method == "date":
+                # Most recent liked_at first -> negate timestamp
+                # None values get 0 (sorted last)
+                if track.liked_at:
+                    key_parts.append(-track.liked_at.timestamp())
+                else:
+                    key_parts.append(0)
+            elif sort_method == "release":
+                # Newest release first -> invert the string for comparison
+                # Release dates are in YYYY-MM-DD format
+                # We invert by subtracting each char from 'z' to reverse string ordering
+                release = track.release_date if track.release_date else ""
+                if release:
+                    # Invert the string for descending order
+                    # YYYY-MM-DD strings naturally sort ascending, so we invert
+                    inverted = "".join(
+                        chr(ord("z") - ord(c) + ord("0")) if c.isdigit() else c
+                        for c in release
+                    )
+                    key_parts.append(inverted)
+                else:
+                    key_parts.append("z" * 10)  # Sort empty dates last
+
+        return tuple(key_parts)
+
+    sorted_tracks = sorted(tracks, key=make_sort_key)
+    return sorted_tracks
+
+
 @click.group()
 def cli():
     """Spotify playlist helper for organizing and analyzing your music library."""
@@ -95,9 +191,8 @@ def top_artists(pattern, limit, liked_only):
 @click.option(
     "--sort",
     "-s",
-    type=click.Choice(["popularity", "date", "release", "random"]),
     default="popularity",
-    help="Sort method (popularity, date added, release date, random)",
+    help="Sort method(s) - comma-separated for multiple: popularity, rarity, date, release, random",
 )
 @click.option(
     "--name", "-n", help="Name of the new playlist (defaults to a generated name)"
@@ -116,34 +211,8 @@ def create_unsorted(pattern, count, sort, name):
 
     click.echo(f"Found {len(unsorted_tracks)} unsorted liked tracks")
 
-    # Sort the tracks
-    if sort == "popular":
-        sorted_tracks = sorted(
-            unsorted_tracks, key=lambda t: t.liked_at or 0, reverse=True
-        )  # type: ignore
-        sorted_tracks = sorted(
-            sorted_tracks[:count], key=lambda t: t.popularity or 0, reverse=True
-        )
-    if sort == "unpopular":
-        sorted_tracks = sorted(
-            unsorted_tracks, key=lambda t: t.liked_at or 0, reverse=True
-        )  # type: ignore
-        sorted_tracks = sorted(
-            sorted_tracks[:count], key=lambda t: t.popularity or 0, reverse=False
-        )
-    elif sort == "date":
-        sorted_tracks = sorted(
-            unsorted_tracks, key=lambda t: t.liked_at or datetime.min, reverse=True
-        )  # type: ignore
-    elif sort == "release":
-        sorted_tracks = sorted(
-            unsorted_tracks, key=lambda t: t.release_date or "", reverse=True
-        )  # type: ignore
-    else:  # random
-        import random
-
-        sorted_tracks = list(unsorted_tracks)
-        random.shuffle(sorted_tracks)
+    # Sort the tracks using the multi-sort function
+    sorted_tracks = apply_multi_sort(unsorted_tracks, sort)
 
     # Limit to requested count
     tracks_to_add = sorted_tracks[:count]
@@ -222,7 +291,13 @@ def api_info():
 
 @cli.command()
 @click.argument("name", required=True)
-def show_playlist(name):
+@click.option(
+    "--sort",
+    "-s",
+    default="popularity",
+    help="Sort method(s) - comma-separated for multiple: popularity, rarity, date, release, random",
+)
+def show_playlist(name, sort):
     """Show details of a playlist by name (partial match)."""
     spotify = get_spotify_client()
 
@@ -237,6 +312,7 @@ def show_playlist(name):
         return
 
     # Show all matching playlists
+    # TODO: [ ] I don't really want this, probably just search through a single playlist
     for playlist in matching_playlists:
         click.echo(f"\n=== {playlist['name']} ===")
         click.echo(f"ID: {playlist['id']}")
@@ -244,14 +320,77 @@ def show_playlist(name):
         click.echo(f"Public: {playlist['public']}")
         click.echo(f"Tracks: {playlist['tracks']['total']}")
 
-        # Get first 5 tracks as a preview
-        tracks = spotify.playlist_tracks(playlist["id"], limit=5)["items"]  # type: ignore
-        if tracks:
+        # Get all tracks for sorting (if sort is specified)
+        all_items = []
+        if sort and sort != "popularity":
+            # Fetch all tracks for sorting
+            results = spotify.playlist_tracks(playlist["id"])
+            all_items = results["items"]
+            while results["next"]:  # type: ignore
+                results = spotify.next(results)  # type: ignore
+                all_items.extend(results["items"])
+        else:
+            # Just get first 5 for preview
+            all_items = spotify.playlist_tracks(playlist["id"], limit=5)["items"]
+
+        # Apply sorting if needed
+        if sort and len(all_items) > 0:
+            # Parse sort methods
+            sort_methods = [s.strip() for s in sort.split(",")]
+
+            # Special case for random
+            if "random" in sort_methods:
+                import random
+
+                random.shuffle(all_items)
+            else:
+                # Apply sorts in reverse order
+                for sort_method in reversed(sort_methods):
+                    if sort_method == "popularity":
+                        all_items = sorted(
+                            all_items,
+                            key=lambda item: item["track"].get("popularity", 0)
+                            if item["track"]
+                            else 0,
+                            reverse=True,
+                        )
+                    elif sort_method == "rarity":
+                        all_items = sorted(
+                            all_items,
+                            key=lambda item: item["track"].get("popularity", 0)
+                            if item["track"]
+                            else 0,
+                            reverse=False,
+                        )
+                    elif sort_method == "date":
+                        all_items = sorted(
+                            all_items,
+                            key=lambda item: item.get("added_at", ""),
+                            reverse=True,
+                        )
+                    elif sort_method == "release":
+                        all_items = sorted(
+                            all_items,
+                            key=lambda item: item["track"]
+                            .get("album", {})
+                            .get("release_date", "")
+                            if item["track"]
+                            else "",
+                            reverse=True,
+                        )
+
+        # Show top 5 tracks
+        tracks_to_show = all_items[:5]
+        if tracks_to_show:
             click.echo("\nPreview of tracks:")
-            for i, item in enumerate(tracks, 1):
+            for i, item in enumerate(tracks_to_show, 1):
                 track = item["track"]
-                artists = ", ".join([artist["name"] for artist in track["artists"]])
-                click.echo(f"{i}. {track['name']} by {artists}")
+                if track:
+                    artists = ", ".join([artist["name"] for artist in track["artists"]])
+                    popularity = track.get("popularity", "N/A")
+                    click.echo(
+                        f"{i}. {track['name']} by {artists} (popularity: {popularity})"
+                    )
 
 
 if __name__ == "__main__":
