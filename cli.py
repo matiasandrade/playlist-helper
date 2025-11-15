@@ -23,6 +23,7 @@ def apply_multi_sort(tracks, sort_string):
                     - rarity: low to high (least popular = rarest first)
                     - date: most recent liked_at first
                     - release: newest release_date first
+                    - oldest: oldest release_date first (vintage tracks)
 
     Returns:
         Sorted list of tracks
@@ -31,6 +32,10 @@ def apply_multi_sort(tracks, sort_string):
         "rarity,date" -> Sort by rarity (least popular first),
                          then by date added (most recent first) for ties
         This means: among the rarest tracks, show the most recently added ones first
+
+        "oldest,date" -> Sort by oldest releases first,
+                         then by most recently liked for ties
+        This finds vintage tracks you've recently discovered
 
     LIMITATION - Two-Stage Sorting Not Supported:
         The current implementation uses hierarchical/tuple-based sorting.
@@ -101,6 +106,15 @@ def apply_multi_sort(tracks, sort_string):
                     key_parts.append(inverted)
                 else:
                     key_parts.append("z" * 10)  # Sort empty dates last
+            elif sort_method == "oldest":
+                # Oldest release first -> use string directly (ascending order)
+                # Release dates in YYYY-MM-DD format naturally sort oldest first
+                release = track.release_date if track.release_date else ""
+                if release:
+                    key_parts.append(release)
+                else:
+                    # Empty dates go last
+                    key_parts.append("z" * 10)
 
         return tuple(key_parts)
 
@@ -192,7 +206,7 @@ def top_artists(pattern, limit, liked_only):
     "--sort",
     "-s",
     default="popularity",
-    help="Sort method(s) - comma-separated for multiple: popularity, rarity, date, release, random",
+    help="Sort method(s) - comma-separated for multiple: popularity, rarity, date, release, oldest, random",
 )
 @click.option(
     "--name", "-n", help="Name of the new playlist (defaults to a generated name)"
@@ -295,7 +309,7 @@ def api_info():
     "--sort",
     "-s",
     default="popularity",
-    help="Sort method(s) - comma-separated for multiple: popularity, rarity, date, release, random",
+    help="Sort method(s) - comma-separated for multiple: popularity, rarity, date, release, oldest, random",
 )
 def show_playlist(name, sort):
     """Show details of a playlist by name (partial match)."""
@@ -378,6 +392,16 @@ def show_playlist(name, sort):
                             else "",
                             reverse=True,
                         )
+                    elif sort_method == "oldest":
+                        all_items = sorted(
+                            all_items,
+                            key=lambda item: item["track"]
+                            .get("album", {})
+                            .get("release_date", "")
+                            if item["track"]
+                            else "",
+                            reverse=False,
+                        )
 
         # Show top 5 tracks
         tracks_to_show = all_items[:5]
@@ -388,8 +412,9 @@ def show_playlist(name, sort):
                 if track:
                     artists = ", ".join([artist["name"] for artist in track["artists"]])
                     popularity = track.get("popularity", "N/A")
+                    release_date = track.get("album", {}).get("release_date", "N/A")
                     click.echo(
-                        f"{i}. {track['name']} by {artists} (popularity: {popularity})"
+                        f"{i}. {track['name']} by {artists} (pop: {popularity}, release: {release_date})"
                     )
 
 
