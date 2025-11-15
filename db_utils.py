@@ -235,18 +235,23 @@ def get_top_artists(
 
 
 def get_unsorted_liked_tracks(session: Session, playlist_pattern: str) -> List[Track]:
-    """Get tracks that are liked but not in any playlist matching the pattern."""
+    """Get tracks that are liked but not in any playlist matching the pattern.
+
+    Uses a NOT EXISTS subquery to properly exclude tracks that appear in ANY
+    playlist matching the pattern, even if they also appear in non-matching playlists.
+    """
+    # Subquery to find tracks that ARE in playlists matching the pattern
+    subquery = (
+        session.query(playlisttrack_association.c.track_id)
+        .join(Playlist, Playlist.id == playlisttrack_association.c.playlist_id)
+        .filter(Playlist.name.like(f"%{playlist_pattern}%"))
+        .subquery()
+    )
+
+    # Get liked tracks that are NOT in the subquery
     return (
         session.query(Track)
         .filter(Track.is_liked == 1)
-        .outerjoin(
-            playlisttrack_association, Track.id == playlisttrack_association.c.track_id
-        )
-        .outerjoin(
-            Playlist,
-            (Playlist.id == playlisttrack_association.c.playlist_id)
-            & (Playlist.name.like(f"%{playlist_pattern}%")),
-        )
-        .filter(Playlist.id == None)
+        .filter(~Track.id.in_(session.query(subquery.c.track_id)))
         .all()
     )
