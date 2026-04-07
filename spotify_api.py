@@ -19,7 +19,7 @@ def get_spotify_client() -> spotipy.Spotify:
         auth_manager=SpotifyOAuth(
             client_id=os.getenv("CLIENT_ID"),
             client_secret=os.getenv("CLIENT_SECRET"),
-            redirect_uri="http://localhost:8888/callback",
+            redirect_uri="http://127.0.0.1:8888/callback",
             scope="user-library-read playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public",
         )
     )

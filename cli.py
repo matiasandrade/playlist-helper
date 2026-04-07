@@ -300,7 +300,7 @@ def create_unsorted(pattern, count, sort, name):
     playlist = create_playlist(
         spotify=spotify,
         name=name,
-        description=f"Unsorted tracks from liked songs for {pattern}. Created on {datetime.now().strftime('%Y-%m-%d')}",
+        description=f"Unsorted tracks from liked songs for {pattern}. Sort: {sort}. Created on {datetime.now().strftime('%Y-%m-%d')}",
         public=False,
     )
 
